@@ -38,11 +38,34 @@ Convex handles:
 - Chat history per document
 - Authentication
 
+## Development Commands
+
+```bash
+# Run Next.js dev server
+npm run dev
+
+# Run Convex dev server (separate terminal)
+npx convex dev
+
+# Build for production
+npm run build
+
+# Lint
+npm run lint
+
+# Deploy Convex
+CONVEX_DEPLOY_KEY='dev:elegant-snake-131|...' npx convex deploy
+
+# Deploy to Vercel
+vercel --prod
+```
+
 ## Credentials
 
 - **Modal**: Profile `alexhamn`, token at `/Users/alex/.modal.toml`
 - **Convex URL**: `https://elegant-snake-131.convex.cloud`
 - **Convex deploy key**: `dev:elegant-snake-131|eyJ2MiI6IjQ4MDA0ZTc4Yzk4NTRlOTFhNGQ0YTMyNGQ2Yjc0YjAxIn0=`
+- **Vercel**: https://tts-lanpro.vercel.app
 
 ## Implementation Order
 
