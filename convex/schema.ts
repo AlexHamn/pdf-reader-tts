@@ -22,6 +22,13 @@ export default defineSchema({
     )),
     embeddingError: v.optional(v.string()),
     chunkCount: v.optional(v.number()),
+    ttsStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("error")
+    )),
+    ttsError: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_status", ["status"])
@@ -40,4 +47,18 @@ export default defineSchema({
     content: v.string(),
     createdAt: v.number(),
   }).index("by_document", ["documentId"]),
+
+  audioChunks: defineTable({
+    documentId: v.id("documents"),
+    chunkIndex: v.number(),
+    audioFileId: v.id("_storage"),
+    durationMs: v.number(),
+    textContent: v.string(),
+    startCharIndex: v.number(),
+    endCharIndex: v.number(),
+    language: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_document", ["documentId"])
+    .index("by_document_chunk", ["documentId", "chunkIndex"]),
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { useParams } from "next/navigation";
@@ -13,8 +14,17 @@ import {
   AlertCircle,
   Clock,
   BookOpen,
+  MessageSquare,
 } from "lucide-react";
 import { ChatPanel } from "@/components/chat-panel";
+import { AudioPlayer } from "@/components/audio-player";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 type DocumentStatus = "uploading" | "processing" | "ready" | "error";
 
@@ -126,10 +136,32 @@ function cleanOCRText(raw: string): string {
   return cleaned;
 }
 
-function TextContent({ text }: { text: string }) {
-  // Clean OCR markup and split into paragraphs
+interface AudioChunkDisplay {
+  chunkIndex: number;
+  textContent: string;
+}
+
+interface TextContentProps {
+  text: string;
+  audioChunks?: AudioChunkDisplay[];
+  currentChunkIndex?: number;
+  isAudioPlaying?: boolean;
+  onChunkClick?: (chunkIndex: number) => void;
+}
+
+function TextContent({ text, audioChunks, currentChunkIndex, isAudioPlaying, onChunkClick }: TextContentProps) {
   const cleanedText = cleanOCRText(text);
-  const paragraphs = cleanedText.split(/\n\n+/).filter((p) => p.trim());
+  const hasChunks = audioChunks && audioChunks.length > 0;
+
+  // Scroll to active chunk when playing
+  useEffect(() => {
+    if (isAudioPlaying && currentChunkIndex !== undefined) {
+      const activeElement = window.document.getElementById(`chunk-${currentChunkIndex}`);
+      if (activeElement) {
+        activeElement.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [isAudioPlaying, currentChunkIndex]);
 
   return (
     <article className="prose-reader">
@@ -141,24 +173,36 @@ function TextContent({ text }: { text: string }) {
         <div>
           <p className="text-sm font-medium text-foreground">Extracted Text</p>
           <p className="text-xs text-muted-foreground">
-            {paragraphs.length} paragraph{paragraphs.length !== 1 ? "s" : ""} · {cleanedText.length.toLocaleString()} characters
+            {hasChunks
+              ? `${audioChunks.length} chunk${audioChunks.length !== 1 ? "s" : ""} · ${cleanedText.length.toLocaleString()} characters`
+              : `${cleanedText.length.toLocaleString()} characters`}
           </p>
         </div>
       </div>
 
-      {/* Content with refined typography */}
+      {/* Content - always chunk mode */}
       <div className="space-y-6">
-        {paragraphs.map((paragraph, index) => (
-          <p
-            key={index}
-            className="text-pretty leading-relaxed text-foreground/90 first-letter:text-lg first-letter:font-medium"
-            style={{
-              animationDelay: `${Math.min(index * 30, 300)}ms`,
-            }}
-          >
-            {paragraph.trim()}
+        {hasChunks ? (
+          audioChunks.map((chunk) => (
+            <p
+              key={chunk.chunkIndex}
+              id={`chunk-${chunk.chunkIndex}`}
+              onClick={() => onChunkClick?.(chunk.chunkIndex)}
+              className={`cursor-pointer hover:bg-muted/50 text-pretty leading-relaxed transition-all duration-300 ${
+                isAudioPlaying && chunk.chunkIndex === currentChunkIndex
+                  ? "rounded-lg bg-violet-100/60 px-3 py-2 text-foreground dark:bg-violet-900/30"
+                  : "text-foreground/90"
+              }`}
+            >
+              {chunk.textContent}
+            </p>
+          ))
+        ) : (
+          // Fallback while chunks are loading
+          <p className="text-pretty leading-relaxed text-foreground/90">
+            {cleanedText}
           </p>
-        ))}
+        )}
       </div>
 
       {/* End mark */}
@@ -178,6 +222,56 @@ export default function DocumentPage() {
   const documentId = params.id as Id<"documents">;
 
   const document = useQuery(api.documents.get, { id: documentId });
+  const audioChunks = useQuery(api.tts.listAudioChunks, { documentId });
+  const updatePlaybackState = useMutation(api.tts.updatePlaybackState);
+
+  // State for tracking current chunk and play state
+  const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
+  // Handle chunk changes from audio player
+  const handleChunkChange = useCallback(
+    (chunkIndex: number, _startChar: number, _endChar: number) => {
+      setCurrentChunkIndex(chunkIndex);
+    },
+    []
+  );
+
+  // Handle play state changes from audio player
+  const handlePlayStateChange = useCallback((isPlaying: boolean) => {
+    setIsAudioPlaying(isPlaying);
+  }, []);
+
+  // Handle click on a text chunk to start playing from that chunk
+  const handleChunkClick = useCallback((chunkIndex: number) => {
+    updatePlaybackState({
+      documentId,
+      currentChunkIndex: chunkIndex,
+      isPlaying: true,
+    });
+  }, [documentId, updatePlaybackState]);
+
+  // Handle clicks outside chat and audio player to close chat
+  const handlePageClick = useCallback((e: React.MouseEvent) => {
+    if (!isChatOpen) return;
+
+    const target = e.target as HTMLElement;
+    // Don't close if clicking on audio player or inside the sheet
+    if (target.closest("[data-audio-player]") || target.closest("[data-slot='sheet-content']")) {
+      return;
+    }
+    setIsChatOpen(false);
+  }, [isChatOpen]);
+
+  // Transform audio chunks for TextContent display
+  const audioChunksForDisplay = useMemo(() => {
+    if (!audioChunks) return undefined;
+    return audioChunks.map((chunk) => ({
+      chunkIndex: chunk.chunkIndex,
+      textContent: chunk.textContent,
+    }));
+  }, [audioChunks]);
 
   // Loading state
   if (document === undefined) {
@@ -225,7 +319,10 @@ export default function DocumentPage() {
   const statusCfg = statusConfig[document.status];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20">
+    <div
+      className="min-h-screen bg-gradient-to-b from-background via-background to-muted/20"
+      onClick={handlePageClick}
+    >
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border/50 bg-background/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
@@ -244,8 +341,10 @@ export default function DocumentPage() {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="mx-auto max-w-3xl px-6 py-8">
+      {/* Main content - shifts left when chat is open (on larger screens) */}
+      <main className={`max-w-3xl px-6 py-8 mx-auto transition-transform duration-500 ease-in-out ${
+        isChatOpen ? "sm:-translate-x-[14rem]" : ""
+      }`}>
         {/* Document title section */}
         <div className="mb-8">
           <div className="flex items-start gap-4">
@@ -267,28 +366,89 @@ export default function DocumentPage() {
           </div>
         </div>
 
+
         {/* Content area */}
         {document.status === "ready" && document.extractedText ? (
           <div className="rounded-2xl border border-border/50 bg-card p-8 shadow-sm sm:p-10">
-            <TextContent text={document.extractedText} />
+            <TextContent
+              text={document.extractedText}
+              audioChunks={audioChunksForDisplay}
+              currentChunkIndex={currentChunkIndex}
+              isAudioPlaying={isAudioPlaying}
+              onChunkClick={handleChunkClick}
+            />
           </div>
         ) : (
           <StatusCard status={document.status} error={document.error} />
         )}
 
-        {/* Chat panel - show when document is ready */}
-        {document.status === "ready" && (
-          <div className="mt-8">
+      </main>
+
+      {/* Footer spacing for floating elements */}
+      <div className="h-32" />
+
+      {/* Floating audio player - centered at bottom */}
+      {document.status === "ready" && document.extractedText && (
+        <div
+          data-audio-player
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <AudioPlayer
+            documentId={documentId}
+            onChunkChange={handleChunkChange}
+            onPlayStateChange={handlePlayStateChange}
+          />
+        </div>
+      )}
+
+      {/* Floating chat button - hidden when chat is open */}
+      {document.status === "ready" && !isChatOpen && (
+        <Button
+          onClick={() => setIsChatOpen(true)}
+          size="icon"
+          className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lg"
+        >
+          <MessageSquare className="h-6 w-6" />
+        </Button>
+      )}
+
+      {/* Chat sheet - non-modal so user can still interact with reader */}
+      <Sheet open={isChatOpen} modal={false}>
+        <SheetContent
+          side="right"
+          showOverlay={false}
+          showCloseButton={false}
+          className="w-full sm:max-w-md p-0 flex flex-col shadow-2xl border-l-2"
+        >
+          <SheetHeader className="p-4 border-b">
+            <div className="flex items-center justify-between">
+              <SheetTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Ask about this document
+              </SheetTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsChatOpen(false)}
+                className="h-8 w-8"
+              >
+                <span className="sr-only">Close</span>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+          </SheetHeader>
+          <div className="flex-1 overflow-hidden">
             <ChatPanel
               documentId={documentId}
               isReady={document.embeddingStatus === "ready"}
+              embedded
             />
           </div>
-        )}
-      </main>
-
-      {/* Footer spacing */}
-      <div className="h-16" />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

@@ -74,6 +74,14 @@ export const processDocument = internalAction({
       });
 
       console.log(`Embedding processing scheduled for document ${args.documentId}`);
+
+      // Trigger TTS audio generation in background
+      await ctx.scheduler.runAfter(0, internal.tts.processDocumentTTS, {
+        documentId: args.documentId,
+        language: "es",
+      });
+
+      console.log(`TTS generation scheduled for document ${args.documentId}`);
     } catch (error) {
       console.error(`OCR processing failed for document ${args.documentId}:`, error);
 

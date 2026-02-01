@@ -29,7 +29,7 @@ Four Modal endpoints:
 1. `ocr_endpoint` - PDF → extracted text (DeepSeek-OCR 2) ✓
 2. `embedding_endpoint` - text → vectors (nomic-embed-text-v1.5) ✓
 3. `llm_endpoint` - Q&A chat completions (Qwen2.5-7B-Instruct via vLLM) ✓
-4. `tts_endpoint` - text → audio stream (Chatterbox TTS)
+4. `tts_endpoint` - text → audio stream (Chatterbox TTS) ✓
 
 Convex handles:
 - File storage for PDFs
@@ -81,7 +81,7 @@ See `docs/epics.md` for detailed progress tracking.
 2. ~~OCR Pipeline~~ **DONE**
 3. ~~Embeddings & Vector Search~~ **DONE**
 4. ~~Q&A Chat Interface~~ **DONE**
-5. TTS Playback
+5. ~~TTS Playback~~ **DONE**
 
 ## Important Notes
 
@@ -126,6 +126,29 @@ See `docs/epics.md` for detailed progress tracking.
   - Model weights cached in Modal Volume (`huggingface-cache`, `vllm-cache`)
   - Max context: 8192 tokens
   - Supports concurrent requests (max 16)
+
+### TTS Endpoint (`modal/tts_endpoint.py`)
+- **Model**: Chatterbox TTS (multilingual, 23 languages)
+- **GPU**: A10G
+- **Endpoint**: Set `MODAL_TTS_ENDPOINT` env var in Convex dashboard
+- **API**: POST with `text`, `language`, `exaggeration`, `cfg_weight` parameters
+- **Output**: WAV audio (streamed)
+- **Notes**:
+  - Model cached in Modal Volume (`tts-model-cache`)
+  - Text preprocessing to handle problematic characters
+  - Minimum text length padding to avoid tensor issues
+  - Supports Spanish, English, French, German, Chinese, and more
+
+### TTS Integration
+- **Convex Module**: `convex/tts.ts` - audio chunk management and playback state
+- **Audio Player**: `src/components/audio-player.tsx` - playback controls, speed adjustment, auto-advance
+- **Schema**: `audioChunks` (per-chunk audio storage), `playbackState` (real-time sync)
+- **Flow**: Document ready → auto-generate audio → chunks stored with URLs → player loads chunks sequentially
+- **Features**:
+  - Click-to-play: Click any text chunk to start playback from that position
+  - Text highlighting: Active chunk highlighted during playback with auto-scroll
+  - Continuous playback: Auto-advances through chunks
+  - Playback speed: 0.75x, 1x, 1.25x, 1.5x, 2x
 
 ### Q&A Chat Integration
 - **Chat Actions**: `convex/chat.ts` - sends user message with RAG context and conversation history to LLM

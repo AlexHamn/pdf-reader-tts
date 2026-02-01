@@ -92,16 +92,26 @@ Users can ask questions about their documents
 ---
 
 ## Epic 5: TTS Playback
-**Status:** Not Started
+**Status:** Complete
 
 ### Tasks
-- [ ] Modal TTS endpoint (Chatterbox)
-- [ ] Audio player component
-- [ ] Text-to-audio segment mapping
-- [ ] Synchronized text highlighting during playback
+- [x] Modal TTS endpoint (Chatterbox)
+- [x] Audio player component
+- [x] Text-to-audio segment mapping
+- [x] Synchronized text highlighting during playback
+- [x] Click-to-play text chunks
 
 ### Deliverable
 Full read-aloud experience with highlighting
+
+### Implementation Notes
+- **TTS Endpoint**: `modal/tts_endpoint.py` using Chatterbox TTS on A10G GPU
+- **Convex TTS Module**: `convex/tts.ts` - audio chunk storage, playback state management, and generation actions
+- **Audio Player**: `src/components/audio-player.tsx` - full-featured player with play/pause, skip, speed control, auto-advance
+- **Schema Updates**: Added `audioChunks` and `playbackState` tables for chunk storage and real-time playback sync
+- **Text Highlighting**: Active chunk is highlighted in violet during playback with smooth scroll-into-view
+- **Click-to-Play**: Clicking any text chunk starts playback from that chunk
+- **Auto-generation**: Audio is automatically generated when viewing a document without audio
 
 ---
 
@@ -113,4 +123,4 @@ Full read-aloud experience with highlighting
 | 2. OCR Pipeline | Complete | 100% |
 | 3. Embeddings & Vector Search | Complete | 100% |
 | 4. Q&A Chat Interface | Complete | 100% |
-| 5. TTS Playback | Not Started | 0% |
+| 5. TTS Playback | Complete | 100% |

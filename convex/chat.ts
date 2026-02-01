@@ -90,7 +90,7 @@ export const sendMessage = action({
     // Build full message array with conversation history
     const messages: ChatMessage[] = [
       { role: "system", content: SYSTEM_PROMPT },
-      ...previousMessages.map((m) => ({
+      ...previousMessages.map((m: { role: string; content: string }) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
       })),

@@ -11,9 +11,9 @@
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.26",
     "@ai-sdk/provider": "^3.0.7",
-    "@convex-dev/agent": "^0.3.2",
     "@convex-dev/rag": "^0.7.0",
     "@convex-dev/workpool": "^0.3.1",
+    "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-progress": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "ai": "^6.0.67",

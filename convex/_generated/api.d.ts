@@ -14,6 +14,7 @@ import type * as documents from "../documents.js";
 import type * as embeddings from "../embeddings.js";
 import type * as ocr from "../ocr.js";
 import type * as rag from "../rag.js";
+import type * as tts from "../tts.js";
 
 import type {
   ApiFromModules,
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   embeddings: typeof embeddings;
   ocr: typeof ocr;
   rag: typeof rag;
+  tts: typeof tts;
 }>;
 
 /**
