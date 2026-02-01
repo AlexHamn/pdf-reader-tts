@@ -75,7 +75,7 @@ vercel --prod
 See `docs/epics.md` for detailed progress tracking.
 
 1. ~~Foundation & PDF Upload~~ **DONE**
-2. ~~OCR Pipeline~~ **DONE** (viewer pending)
+2. ~~OCR Pipeline~~ **DONE**
 3. Embeddings & Vector Search
 4. Q&A Chat Interface
 5. TTS Playback
@@ -98,6 +98,7 @@ See `docs/epics.md` for detailed progress tracking.
   - Uses `attn_implementation="eager"` (SDPA not supported)
   - Model cached in Modal Volume for faster cold starts
   - First request downloads ~6GB model weights
+  - Output includes markup tags (`<|ref|>`, `<|det|>`) with bounding boxes - cleaned in frontend (`cleanOCRText` in document page)
 
 ## References
 

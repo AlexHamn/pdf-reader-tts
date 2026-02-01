@@ -19,13 +19,13 @@ Users can upload and view their PDF library
 ---
 
 ## Epic 2: OCR Pipeline
-**Status:** Started
+**Status:** Complete
 
 ### Tasks
 - [x] Modal OCR endpoint (DeepSeek-OCR 2)
 - [x] Convex action to trigger OCR on upload
 - [x] Store extracted text in Convex DB
-- [ ] Basic PDF viewer showing extracted text
+- [x] Basic PDF viewer showing extracted text
 
 ### Deliverable
 Uploaded PDFs are processed and text is viewable
@@ -79,7 +79,7 @@ Full read-aloud experience with highlighting
 | Epic | Status | Completion |
 |------|--------|------------|
 | 1. Foundation & PDF Upload | Complete | 100% |
-| 2. OCR Pipeline | Started | 75% |
+| 2. OCR Pipeline | Complete | 100% |
 | 3. Embeddings & Vector Search | Not Started | 0% |
 | 4. Q&A Chat Interface | Not Started | 0% |
 | 5. TTS Playback | Not Started | 0% |

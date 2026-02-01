@@ -83,6 +83,8 @@ class OCRModel:
         import tempfile
         import os
         import shutil
+        import sys
+        from io import StringIO
 
         prompt = "<image>\n<|grounding|>Convert the document to markdown."
 
@@ -94,17 +96,36 @@ class OCRModel:
             with open(temp_path, "wb") as f:
                 f.write(image_bytes)
 
-            result = self.model.infer(
-                self.tokenizer,
-                prompt=prompt,
-                image_file=temp_path,
-                output_path=tmpdir,
-                base_size=1024,
-                image_size=768,
-                crop_mode=True,
-                save_results=False,
-            )
-            return result if isinstance(result, str) else str(result)
+            # Capture stdout - model prints results instead of returning them
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = StringIO()
+
+            try:
+                result = self.model.infer(
+                    self.tokenizer,
+                    prompt=prompt,
+                    image_file=temp_path,
+                    output_path=tmpdir,
+                    base_size=1024,
+                    image_size=768,
+                    crop_mode=True,
+                    save_results=False,
+                )
+            finally:
+                sys.stdout = old_stdout
+
+            # Get captured stdout
+            stdout_text = captured_output.getvalue()
+
+            # Check if result is a valid string first
+            if result and isinstance(result, str) and result.strip() and result.strip() != "None":
+                return result
+
+            # Use captured stdout if available
+            if stdout_text and stdout_text.strip():
+                return stdout_text.strip()
+
+            return str(result) if result else ""
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
