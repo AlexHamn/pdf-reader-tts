@@ -5,13 +5,13 @@ Progress tracker for the Interactive PDF Reader with TTS and Q&A.
 ---
 
 ## Epic 1: Foundation & PDF Upload
-**Status:** Not Started
+**Status:** Complete
 
 ### Tasks
-- [ ] Next.js project setup with Convex integration
-- [ ] Basic UI shell (layout, navigation)
-- [ ] PDF upload to Convex file storage
-- [ ] Document list/library view
+- [x] Next.js project setup with Convex integration
+- [x] Basic UI shell (layout, navigation)
+- [x] PDF upload to Convex file storage
+- [x] Document list/library view
 
 ### Deliverable
 Users can upload and view their PDF library
@@ -19,12 +19,12 @@ Users can upload and view their PDF library
 ---
 
 ## Epic 2: OCR Pipeline
-**Status:** Not Started
+**Status:** Started
 
 ### Tasks
-- [ ] Modal OCR endpoint (DeepSeek-OCR 2)
-- [ ] Convex action to trigger OCR on upload
-- [ ] Store extracted text in Convex DB
+- [x] Modal OCR endpoint (DeepSeek-OCR 2)
+- [x] Convex action to trigger OCR on upload
+- [x] Store extracted text in Convex DB
 - [ ] Basic PDF viewer showing extracted text
 
 ### Deliverable
@@ -78,8 +78,8 @@ Full read-aloud experience with highlighting
 
 | Epic | Status | Completion |
 |------|--------|------------|
-| 1. Foundation & PDF Upload | Not Started | 0% |
-| 2. OCR Pipeline | Not Started | 0% |
+| 1. Foundation & PDF Upload | Complete | 100% |
+| 2. OCR Pipeline | Started | 75% |
 | 3. Embeddings & Vector Search | Not Started | 0% |
 | 4. Q&A Chat Interface | Not Started | 0% |
 | 5. TTS Playback | Not Started | 0% |

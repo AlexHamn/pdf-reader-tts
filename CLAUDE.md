@@ -72,10 +72,13 @@ vercel --prod
 
 ## Implementation Order
 
-1. ~~PDF upload flow + OCR integration (Modal + Convex)~~ **DONE**
-2. Modal embedding endpoint + Convex RAG setup with custom embeddings
-3. TTS playback with synchronized text highlighting
-4. Q&A chat interface using RAG retrieval
+See `docs/epics.md` for detailed progress tracking.
+
+1. ~~Foundation & PDF Upload~~ **DONE**
+2. ~~OCR Pipeline~~ **DONE** (viewer pending)
+3. Embeddings & Vector Search
+4. Q&A Chat Interface
+5. TTS Playback
 
 ## Important Notes
 
