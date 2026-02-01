@@ -56,6 +56,9 @@ npm run lint
 # Deploy Convex
 CONVEX_DEPLOY_KEY='dev:elegant-snake-131|...' npx convex deploy
 
+# Deploy Modal OCR endpoint
+cd modal && modal deploy ocr_endpoint.py
+
 # Deploy to Vercel
 vercel --prod
 ```
@@ -69,7 +72,7 @@ vercel --prod
 
 ## Implementation Order
 
-1. PDF upload flow + OCR integration (Modal + Convex)
+1. ~~PDF upload flow + OCR integration (Modal + Convex)~~ **DONE**
 2. Modal embedding endpoint + Convex RAG setup with custom embeddings
 3. TTS playback with synchronized text highlighting
 4. Q&A chat interface using RAG retrieval
@@ -81,6 +84,17 @@ vercel --prod
 - Batch embedding requests to reduce latency during document ingestion
 - Return embeddings in format expected by Convex RAG component
 - Audio format: MP3 or WAV for web compatibility
+
+## Modal Endpoints
+
+### OCR Endpoint (`modal/ocr_endpoint.py`)
+- **Model**: DeepSeek-OCR-2 (3B params)
+- **GPU**: A10G
+- **Endpoint**: Set `MODAL_OCR_ENDPOINT` env var in Convex dashboard
+- **Notes**:
+  - Uses `attn_implementation="eager"` (SDPA not supported)
+  - Model cached in Modal Volume for faster cold starts
+  - First request downloads ~6GB model weights
 
 ## References
 
