@@ -25,10 +25,11 @@ Convex DB   Modal AI (GPU)
             - TTS (Chatterbox or Fish Speech)
 ```
 
-Three Modal endpoints to implement:
-1. `ocr_endpoint` - PDF → extracted text (DeepSeek-OCR 2)
-2. `embedding_endpoint` - text → vectors (open-source embedding model)
-3. `tts_endpoint` - text → audio stream (Chatterbox TTS)
+Four Modal endpoints:
+1. `ocr_endpoint` - PDF → extracted text (DeepSeek-OCR 2) ✓
+2. `embedding_endpoint` - text → vectors (nomic-embed-text-v1.5) ✓
+3. `llm_endpoint` - Q&A chat completions (Qwen2.5-7B-Instruct via vLLM) ✓
+4. `tts_endpoint` - text → audio stream (Chatterbox TTS)
 
 Convex handles:
 - File storage for PDFs
@@ -56,8 +57,10 @@ npm run lint
 # Deploy Convex
 CONVEX_DEPLOY_KEY='dev:elegant-snake-131|...' npx convex deploy
 
-# Deploy Modal OCR endpoint
+# Deploy Modal endpoints
 cd modal && modal deploy ocr_endpoint.py
+cd modal && modal deploy embedding_endpoint.py
+cd modal && modal deploy llm_endpoint.py
 
 # Deploy to Vercel
 vercel --prod
@@ -77,7 +80,7 @@ See `docs/epics.md` for detailed progress tracking.
 1. ~~Foundation & PDF Upload~~ **DONE**
 2. ~~OCR Pipeline~~ **DONE**
 3. ~~Embeddings & Vector Search~~ **DONE**
-4. Q&A Chat Interface
+4. ~~Q&A Chat Interface~~ **DONE**
 5. TTS Playback
 
 ## Important Notes
@@ -111,6 +114,25 @@ See `docs/epics.md` for detailed progress tracking.
   - Automatically adds `search_document:` prefix for documents
   - Model cached in Modal Volume for faster cold starts
   - Integrated with `@convex-dev/rag` component via custom EmbeddingModelV3 wrapper in `convex/rag.ts`
+
+### LLM Endpoint (`modal/llm_endpoint.py`)
+- **Model**: Qwen/Qwen2.5-7B-Instruct
+- **GPU**: A10G
+- **Framework**: vLLM with OpenAI-compatible API
+- **Endpoint**: Set `MODAL_LLM_ENDPOINT` env var in Convex dashboard
+  - URL: `https://alexhamn--qwen-llm-serve.modal.run`
+- **API**: OpenAI-compatible `/v1/chat/completions`
+- **Notes**:
+  - Model weights cached in Modal Volume (`huggingface-cache`, `vllm-cache`)
+  - Max context: 8192 tokens
+  - Supports concurrent requests (max 16)
+
+### Q&A Chat Integration
+- **Chat Actions**: `convex/chat.ts` - sends user message with RAG context and conversation history to LLM
+- **Chat Queries**: `convex/chatQueries.ts` - message list and storage (includes `listMessagesInternal` for fetching history within actions)
+- **Chat UI**: `src/components/chat-panel.tsx` - integrated into document page
+- **Flow**: User question → fetch conversation history (up to 20 messages) → RAG search for context → LLM generates answer with full context → save to chatMessages table
+- **Note**: Currently uses direct HTTP to LLM instead of `@convex-dev/agent` due to ai SDK version conflict (see `docs/epics.md` for details)
 
 ### Convex RAG Integration
 - **Component**: `@convex-dev/rag` registered in `convex/convex.config.ts`

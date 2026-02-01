@@ -54,16 +54,40 @@ Documents are indexed and searchable
 ---
 
 ## Epic 4: Q&A Chat Interface
-**Status:** Not Started
+**Status:** Complete
 
 ### Tasks
-- [ ] Chat UI component per document
-- [ ] RAG retrieval for context
-- [ ] LLM integration for answers
-- [ ] Chat history persistence
+- [x] Chat UI component per document
+- [x] RAG retrieval for context
+- [x] LLM integration for answers (Modal vLLM + Qwen2.5-7B-Instruct)
+- [x] Chat history persistence
 
 ### Deliverable
 Users can ask questions about their documents
+
+### Implementation Notes
+- **LLM Endpoint**: `modal/llm_endpoint.py` using vLLM with Qwen/Qwen2.5-7B-Instruct on A10G GPU
+- **Chat Actions**: `convex/chat.ts` - sends messages with RAG context to LLM, includes full conversation history (up to 20 messages)
+- **Chat Queries**: `convex/chatQueries.ts` - message retrieval and storage, includes `listMessagesInternal` for fetching history within actions
+- **Chat UI**: `src/components/chat-panel.tsx` - chat interface integrated into document page
+- **Schema**: Uses existing `chatMessages` table for message persistence
+- **Conversation Context**: Full message history is sent to the LLM, enabling follow-up questions with pronoun references (e.g., "What does she do?" after asking about a character)
+
+### Technical Debt / Future Improvements
+> **TODO: Revisit @convex-dev/agent integration**
+>
+> Currently using direct HTTP calls to the LLM instead of the Convex Agent component.
+> This is due to a peer dependency conflict:
+> - `@convex-dev/rag` requires `ai@^6.0.0`
+> - `@convex-dev/agent` requires `ai@^5.0.29`
+>
+> When these packages become compatible (likely when agent supports ai SDK v6),
+> consider migrating to use the Agent component for:
+> - Built-in thread management
+> - Streaming deltas over WebSocket
+> - ~~Message history context~~ (now implemented manually)
+> - Rate limiting
+> - Usage tracking
 
 ---
 
@@ -88,5 +112,5 @@ Full read-aloud experience with highlighting
 | 1. Foundation & PDF Upload | Complete | 100% |
 | 2. OCR Pipeline | Complete | 100% |
 | 3. Embeddings & Vector Search | Complete | 100% |
-| 4. Q&A Chat Interface | Not Started | 0% |
+| 4. Q&A Chat Interface | Complete | 100% |
 | 5. TTS Playback | Not Started | 0% |

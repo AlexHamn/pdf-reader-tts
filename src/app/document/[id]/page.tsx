@@ -14,6 +14,7 @@ import {
   Clock,
   BookOpen,
 } from "lucide-react";
+import { ChatPanel } from "@/components/chat-panel";
 
 type DocumentStatus = "uploading" | "processing" | "ready" | "error";
 
@@ -273,6 +274,16 @@ export default function DocumentPage() {
           </div>
         ) : (
           <StatusCard status={document.status} error={document.error} />
+        )}
+
+        {/* Chat panel - show when document is ready */}
+        {document.status === "ready" && (
+          <div className="mt-8">
+            <ChatPanel
+              documentId={documentId}
+              isReady={document.embeddingStatus === "ready"}
+            />
+          </div>
         )}
       </main>
 

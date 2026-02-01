@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as chat from "../chat.js";
+import type * as chatQueries from "../chatQueries.js";
 import type * as documents from "../documents.js";
 import type * as embeddings from "../embeddings.js";
 import type * as ocr from "../ocr.js";
@@ -20,6 +22,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  chat: typeof chat;
+  chatQueries: typeof chatQueries;
   documents: typeof documents;
   embeddings: typeof embeddings;
   ocr: typeof ocr;
