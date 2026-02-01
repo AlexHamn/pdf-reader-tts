@@ -77,11 +77,21 @@ vercel --prod
 
 See `docs/epics.md` for detailed progress tracking.
 
+**MVP (Complete):**
 1. ~~Foundation & PDF Upload~~ **DONE**
 2. ~~OCR Pipeline~~ **DONE**
 3. ~~Embeddings & Vector Search~~ **DONE**
 4. ~~Q&A Chat Interface~~ **DONE**
 5. ~~TTS Playback~~ **DONE**
+
+**Scaling for 100+ Pages (Planned):**
+6. TTS Parallel Processing - Use Workpool + `max_inputs=10`
+7. OCR Parallelization - Modal `.map()` for page batches
+8. Frontend Virtualization - react-window for large documents
+9. Progressive Playback - Start playback before all chunks ready
+10. Configuration & Optimization - Batch sizes, timeouts
+
+See `docs/scaling-implementation-guide.md` for detailed implementation instructions.
 
 ## Important Notes
 
@@ -133,11 +143,13 @@ See `docs/epics.md` for detailed progress tracking.
 - **Endpoint**: Set `MODAL_TTS_ENDPOINT` env var in Convex dashboard
 - **API**: POST with `text`, `language`, `exaggeration`, `cfg_weight` parameters
 - **Output**: WAV audio (streamed)
+- **Concurrency**: Currently `max_inputs=1` (sequential) - **change to 10 for large docs**
 - **Notes**:
   - Model cached in Modal Volume (`tts-model-cache`)
   - Text preprocessing to handle problematic characters
   - Minimum text length padding to avoid tensor issues
   - Supports Spanish, English, French, German, Chinese, and more
+  - Modal's official Chatterbox example uses `max_inputs=10` on A10G
 
 ### TTS Integration
 - **Convex Module**: `convex/tts.ts` - audio chunk management and playback state
@@ -166,5 +178,9 @@ See `docs/epics.md` for detailed progress tracking.
 ## References
 
 - Modal Chatterbox TTS: https://modal.com/docs/examples/chatterbox_tts
+- Modal Scaling Guide: https://modal.com/docs/guide/scale
 - Convex RAG component: https://www.convex.dev/components/rag
+- Convex Workpool (for parallel jobs): https://www.convex.dev/components/workpool
+- react-window (virtualization): https://web.dev/articles/virtualize-long-lists-react-window
 - Full project spec: `docs/master-prompt.md`
+- Scaling guide: `docs/scaling-implementation-guide.md`

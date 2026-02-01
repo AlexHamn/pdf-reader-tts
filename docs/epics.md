@@ -115,6 +115,144 @@ Full read-aloud experience with highlighting
 
 ---
 
+## Epic 6: TTS Parallel Processing
+**Status:** Not Started
+
+### Background
+Current TTS generation is sequential with `max_inputs=1`, causing 100-page documents to take 60-80+ minutes. Modal's official Chatterbox example uses `max_inputs=10` on A10G GPU.
+
+### Tasks
+- [ ] Update Modal TTS endpoint to `max_inputs=10`
+- [ ] Install and configure `@convex-dev/workpool` component
+- [ ] Refactor `convex/tts.ts` to use Workpool for parallel chunk generation
+- [ ] Implement `onComplete` callback for progress tracking
+- [ ] Add batch enqueueing with `enqueueActionBatch`
+- [ ] Test with 50+ page documents
+
+### Deliverable
+TTS generation runs 10x faster through parallelization
+
+### Technical Notes
+- **Workpool Config**: `maxParallelism: 10` to match Modal endpoint
+- **Retry Logic**: Use Workpool's built-in retry with backoff for transient failures
+- **Progress Tracking**: Use `onComplete` to update document status as chunks complete
+
+### References
+- [Modal Chatterbox Example](https://modal.com/docs/examples/chatterbox_tts)
+- [Convex Workpool](https://www.convex.dev/components/workpool)
+
+---
+
+## Epic 7: OCR Parallelization & Streaming
+**Status:** Not Started
+
+### Background
+Current OCR processes pages sequentially in a single Modal function call. For 100+ pages, this risks timeout and provides no progress feedback until complete.
+
+### Tasks
+- [ ] Refactor OCR endpoint to process page ranges (batches of 20-30 pages)
+- [ ] Implement Modal `.map()` for parallel page batch processing
+- [ ] Add progressive result storage (save after each batch completes)
+- [ ] Increase PDF download timeout from 60s to 180s
+- [ ] Add page-level progress tracking in Convex
+- [ ] Implement checkpointing for resume on failure
+- [ ] Test with 100+ page PDFs
+
+### Deliverable
+OCR handles large documents reliably with progress feedback
+
+### Technical Notes
+- **Batch Size**: 20-30 pages per batch (balances parallelism vs memory)
+- **Parallel Workers**: 4-6 optimal (more causes system churn per research)
+- **Memory**: Process pages incrementally, don't hold all in memory
+- **Timeout**: Increase Modal function timeout to 15 minutes
+
+### References
+- [Modal Scaling Out](https://modal.com/docs/guide/scale)
+- [Modal Job Processing](https://modal.com/docs/guide/job-queue)
+
+---
+
+## Epic 8: Frontend Virtualization
+**Status:** Not Started
+
+### Background
+Current frontend renders all text chunks as DOM nodes. For 100+ page documents (400+ chunks), this causes performance issues and memory pressure.
+
+### Tasks
+- [ ] Install `react-window` and `react-virtualized-auto-sizer`
+- [ ] Refactor `TextContent` component to use `FixedSizeList`
+- [ ] Implement `AutoSizer` for responsive container sizing
+- [ ] Add `overscanCount` buffer (5-10 items)
+- [ ] Implement custom search to replace broken Ctrl+F
+- [ ] Paginate `audioChunks` query (fetch 100 at a time)
+- [ ] Add lazy loading for audio chunk data
+- [ ] Test scrolling performance with 500+ chunks
+
+### Deliverable
+Smooth scrolling and low memory usage for large documents
+
+### Technical Notes
+- **Item Height**: Calculate consistent height for `FixedSizeList`
+- **Search**: Custom search component that finds text, calculates position, scrolls to match
+- **Highlight Sync**: Ensure active chunk highlighting works with virtualization
+- **Click-to-Play**: Maintain click handler functionality on virtualized items
+
+### References
+- [react-window Guide](https://web.dev/articles/virtualize-long-lists-react-window)
+- [React Virtualization Patterns](https://www.patterns.dev/vanilla/virtual-lists/)
+
+---
+
+## Epic 9: Progressive Playback & UX
+**Status:** Not Started
+
+### Background
+Currently, users must wait for all TTS chunks to generate before playback. With parallelization, chunks complete out of order, enabling early playback.
+
+### Tasks
+- [ ] Allow playback to start when first N chunks are ready
+- [ ] Show generation progress (X of Y chunks complete)
+- [ ] Handle out-of-order chunk completion gracefully
+- [ ] Add "generating..." indicator for pending chunks
+- [ ] Implement smart pre-buffering (generate chunks ahead of playback position)
+- [ ] Add estimated time remaining for full generation
+- [ ] Test playback continuity during active generation
+
+### Deliverable
+Users can start listening immediately while generation continues
+
+### Technical Notes
+- **Buffer Strategy**: Keep 5-10 chunks ahead of current playback position
+- **Priority Queue**: Generate chunks near playback position first
+- **UI States**: Playing, buffering, generating, ready
+- **Error Handling**: Skip failed chunks, retry in background
+
+---
+
+## Epic 10: Configuration & Optimization
+**Status:** Not Started
+
+### Background
+Various configuration tweaks to optimize for large documents.
+
+### Tasks
+- [ ] Increase embedding batch size from 50 to 100
+- [ ] Increase OCR Modal timeout from 10 to 15 minutes
+- [ ] Add configurable TTS chunk size (larger for long docs)
+- [ ] Implement document size detection and adaptive processing
+- [ ] Add memory monitoring and cleanup for Modal endpoints
+- [ ] Performance benchmarking suite for regression testing
+
+### Deliverable
+Optimized configuration for documents of all sizes
+
+### Technical Notes
+- **Adaptive Processing**: Detect page count, adjust batch sizes accordingly
+- **Chunk Size Trade-off**: Larger TTS chunks = fewer chunks but less granular playback
+
+---
+
 ## Progress Summary
 
 | Epic | Status | Completion |
@@ -124,3 +262,8 @@ Full read-aloud experience with highlighting
 | 3. Embeddings & Vector Search | Complete | 100% |
 | 4. Q&A Chat Interface | Complete | 100% |
 | 5. TTS Playback | Complete | 100% |
+| 6. TTS Parallel Processing | Not Started | 0% |
+| 7. OCR Parallelization & Streaming | Not Started | 0% |
+| 8. Frontend Virtualization | Not Started | 0% |
+| 9. Progressive Playback & UX | Not Started | 0% |
+| 10. Configuration & Optimization | Not Started | 0% |
