@@ -62,6 +62,18 @@ export const processDocument = internalAction({
       console.log(
         `OCR completed for document ${args.documentId}: ${result.page_count} pages processed`
       );
+
+      // Trigger embedding generation
+      await ctx.runMutation(internal.documents.updateEmbeddingStatus, {
+        id: args.documentId,
+        embeddingStatus: "processing",
+      });
+
+      await ctx.scheduler.runAfter(0, internal.embeddings.processDocumentEmbeddings, {
+        documentId: args.documentId,
+      });
+
+      console.log(`Embedding processing scheduled for document ${args.documentId}`);
     } catch (error) {
       console.error(`OCR processing failed for document ${args.documentId}:`, error);
 

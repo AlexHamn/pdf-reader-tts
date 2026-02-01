@@ -113,6 +113,8 @@ function cleanOCRText(raw: string): string {
   const cleaned = raw
     .replace(/<\|ref\|>[^<]*<\|\/ref\|>/g, "")
     .replace(/<\|det\|>[^<]*<\|\/det\|>/g, "")
+    // Remove PyTorch debug output (e.g., "===== BASE: torch.Size([...]) PATCHES: torch.Size([...]) =====")
+    .replace(/={3,}[^=]*torch\.Size[^=]*={3,}/g, "")
     // Remove page markers like "--- Page 1 ---"
     .replace(/---\s*Page\s*\d+\s*---/g, "")
     // Convert markdown headings to plain text

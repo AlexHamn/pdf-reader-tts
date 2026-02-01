@@ -33,16 +33,23 @@ Uploaded PDFs are processed and text is viewable
 ---
 
 ## Epic 3: Embeddings & Vector Search
-**Status:** Not Started
+**Status:** Complete
 
 ### Tasks
-- [ ] Modal embedding endpoint
-- [ ] Convex RAG component integration with custom embeddings
-- [ ] Chunk text and generate embeddings on document processing
-- [ ] Vector storage in Convex
+- [x] Modal embedding endpoint (nomic-embed-text-v1.5, 768 dimensions)
+- [x] Convex RAG component integration with custom embeddings
+- [x] Chunk text and generate embeddings on document processing
+- [x] Vector storage in Convex
 
 ### Deliverable
 Documents are indexed and searchable
+
+### Implementation Notes
+- **Embedding Endpoint**: `modal/embedding_endpoint.py` using sentence-transformers
+- **RAG Config**: `convex/rag.ts` with custom EmbeddingModelV3 wrapper for Modal
+- **Embeddings Logic**: `convex/embeddings.ts` with chunking (1000 chars, 200 overlap)
+- **Schema Updates**: Added `embeddingStatus`, `embeddingError`, `chunkCount` to documents
+- **Auto-trigger**: OCR completion automatically schedules embedding generation
 
 ---
 
@@ -80,6 +87,6 @@ Full read-aloud experience with highlighting
 |------|--------|------------|
 | 1. Foundation & PDF Upload | Complete | 100% |
 | 2. OCR Pipeline | Complete | 100% |
-| 3. Embeddings & Vector Search | Not Started | 0% |
+| 3. Embeddings & Vector Search | Complete | 100% |
 | 4. Q&A Chat Interface | Not Started | 0% |
 | 5. TTS Playback | Not Started | 0% |

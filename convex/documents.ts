@@ -92,3 +92,21 @@ export const updateFromAction = internalMutation({
     await ctx.db.patch(id, updates);
   },
 });
+
+export const updateEmbeddingStatus = internalMutation({
+  args: {
+    id: v.id("documents"),
+    embeddingStatus: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("error")
+    ),
+    embeddingError: v.optional(v.string()),
+    chunkCount: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, updates);
+  },
+});

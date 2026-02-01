@@ -14,8 +14,18 @@ export default defineSchema({
       v.literal("error")
     ),
     error: v.optional(v.string()),
+    embeddingStatus: v.optional(v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("ready"),
+      v.literal("error")
+    )),
+    embeddingError: v.optional(v.string()),
+    chunkCount: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("by_status", ["status"]),
+  })
+    .index("by_status", ["status"])
+    .index("by_embedding_status", ["embeddingStatus"]),
 
   playbackState: defineTable({
     documentId: v.id("documents"),

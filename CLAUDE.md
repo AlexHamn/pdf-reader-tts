@@ -76,7 +76,7 @@ See `docs/epics.md` for detailed progress tracking.
 
 1. ~~Foundation & PDF Upload~~ **DONE**
 2. ~~OCR Pipeline~~ **DONE**
-3. Embeddings & Vector Search
+3. ~~Embeddings & Vector Search~~ **DONE**
 4. Q&A Chat Interface
 5. TTS Playback
 
@@ -99,6 +99,24 @@ See `docs/epics.md` for detailed progress tracking.
   - Model cached in Modal Volume for faster cold starts
   - First request downloads ~6GB model weights
   - Output includes markup tags (`<|ref|>`, `<|det|>`) with bounding boxes - cleaned in frontend (`cleanOCRText` in document page)
+
+### Embedding Endpoint (`modal/embedding_endpoint.py`)
+- **Model**: nomic-ai/nomic-embed-text-v1.5 (768 dimensions)
+- **GPU**: A10G
+- **Endpoint**: Set `MODAL_EMBEDDING_ENDPOINT` env var in Convex dashboard
+  - URL: `https://alexhamn--text-embeddings-embeddingmodel-embed.modal.run`
+- **Notes**:
+  - Uses sentence-transformers for embedding generation
+  - Batch embedding up to 100 texts per request
+  - Automatically adds `search_document:` prefix for documents
+  - Model cached in Modal Volume for faster cold starts
+  - Integrated with `@convex-dev/rag` component via custom EmbeddingModelV3 wrapper in `convex/rag.ts`
+
+### Convex RAG Integration
+- **Component**: `@convex-dev/rag` registered in `convex/convex.config.ts`
+- **Chunking**: 1000 chars with 200-char overlap, sentence boundary preservation
+- **Flow**: OCR complete → embeddingStatus: "processing" → chunks generated → embeddings stored → embeddingStatus: "ready"
+- **Search**: Use `searchDocument` action in `convex/embeddings.ts` for Q&A retrieval
 
 ## References
 
