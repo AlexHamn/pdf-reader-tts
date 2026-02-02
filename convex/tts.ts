@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { ttsPool } from "./ttsWorkpool";
 
 // ============================================================================
 // Playback State
@@ -306,15 +307,16 @@ export const processDocumentTTS = internalAction({
       documentId: args.documentId,
     });
 
-    let successCount = 0;
-
-    // Generate audio for each chunk sequentially
+    // Enqueue all chunks for parallel processing via workpool
+    const totalChunks = chunks.length;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      console.log(`Generating chunk ${i + 1}/${chunks.length}: "${chunk.text.slice(0, 50)}..."`);
+      console.log(`Enqueuing chunk ${i + 1}/${totalChunks}: "${chunk.text.slice(0, 50)}..."`);
 
-      try {
-        await ctx.runAction(internal.tts.generateSingleChunk, {
+      await ttsPool.enqueueAction(
+        ctx,
+        internal.tts.generateSingleChunk,
+        {
           documentId: args.documentId,
           chunkIndex: i,
           text: chunk.text,
@@ -323,29 +325,16 @@ export const processDocumentTTS = internalAction({
           language,
           exaggeration,
           cfgWeight,
-        });
-        successCount++;
-      } catch (error) {
-        console.error(`Failed to generate chunk ${i} for document ${args.documentId}:`, error);
-        // Continue with remaining chunks even if one fails
-      }
+        },
+        {
+          onComplete: internal.tts.onChunkComplete,
+          context: { documentId: args.documentId, totalChunks },
+        }
+      );
     }
 
-    // Update status based on results
-    if (successCount > 0) {
-      await ctx.runMutation(internal.tts.updateTTSStatus, {
-        id: args.documentId,
-        ttsStatus: "ready",
-      });
-      console.log(`TTS generation completed for document ${args.documentId} (${successCount}/${chunks.length} chunks)`);
-    } else {
-      await ctx.runMutation(internal.tts.updateTTSStatus, {
-        id: args.documentId,
-        ttsStatus: "error",
-        ttsError: "All chunks failed to generate",
-      });
-      console.error(`TTS generation failed for document ${args.documentId}`);
-    }
+    console.log(`Enqueued ${totalChunks} chunks for parallel TTS generation`);
+    // Status will be updated by onChunkComplete when last chunk finishes
   },
 });
 
@@ -409,29 +398,35 @@ export const generateDocumentAudio = action({
       documentId: args.documentId,
     });
 
-    // Generate audio for each chunk sequentially
+    // Enqueue all chunks for parallel processing via workpool
+    const totalChunks = chunks.length;
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      console.log(`Generating chunk ${i + 1}/${chunks.length}: "${chunk.text.slice(0, 50)}..."`);
+      console.log(`Enqueuing chunk ${i + 1}/${totalChunks}: "${chunk.text.slice(0, 50)}..."`);
 
-      await ctx.runAction(internal.tts.generateSingleChunk, {
-        documentId: args.documentId,
-        chunkIndex: i,
-        text: chunk.text,
-        startCharIndex: chunk.startCharIndex,
-        endCharIndex: chunk.endCharIndex,
-        language,
-        exaggeration,
-        cfgWeight,
-      });
+      await ttsPool.enqueueAction(
+        ctx,
+        internal.tts.generateSingleChunk,
+        {
+          documentId: args.documentId,
+          chunkIndex: i,
+          text: chunk.text,
+          startCharIndex: chunk.startCharIndex,
+          endCharIndex: chunk.endCharIndex,
+          language,
+          exaggeration,
+          cfgWeight,
+        },
+        {
+          onComplete: internal.tts.onChunkComplete,
+          context: { documentId: args.documentId, totalChunks },
+        }
+      );
     }
 
-    // Mark as ready
-    await ctx.runMutation(internal.tts.updateTTSStatus, {
-      id: args.documentId,
-      ttsStatus: "ready",
-    });
-
+    console.log(`Enqueued ${totalChunks} chunks for parallel TTS generation`);
+    // Status will be updated by onChunkComplete when last chunk finishes
+    // Return immediately - chunks will process in parallel
     return { chunksGenerated: chunks.length, skipped: false };
   },
 });
@@ -516,6 +511,45 @@ export const saveAudioChunk = internalMutation({
   },
 });
 
+export const onChunkComplete = internalMutation({
+  args: {
+    workId: v.string(),
+    result: v.union(
+      v.object({ kind: v.literal("success"), returnValue: v.any() }),
+      v.object({ kind: v.literal("failed"), error: v.string() }),
+      v.object({ kind: v.literal("canceled") })
+    ),
+    context: v.object({
+      documentId: v.id("documents"),
+      totalChunks: v.number(),
+    }),
+  },
+  handler: async (ctx, args) => {
+    // Log any failures
+    if (args.result.kind === "failed") {
+      console.error(`Chunk ${args.workId} failed: ${args.result.error}`);
+    } else if (args.result.kind === "canceled") {
+      console.warn(`Chunk ${args.workId} was canceled`);
+    }
+
+    // Count completed chunks (only successful ones count)
+    const completedChunks = await ctx.db
+      .query("audioChunks")
+      .withIndex("by_document", (q) => q.eq("documentId", args.context.documentId))
+      .collect();
+
+    console.log(
+      `Chunk completed for document ${args.context.documentId}: ${completedChunks.length}/${args.context.totalChunks} (${args.result.kind})`
+    );
+
+    // If all chunks complete, mark document as ready
+    if (completedChunks.length >= args.context.totalChunks) {
+      await ctx.db.patch(args.context.documentId, { ttsStatus: "ready" });
+      console.log(`TTS generation complete for document ${args.context.documentId}`);
+    }
+  },
+});
+
 // ============================================================================
 // Internal Queries/Mutations
 // ============================================================================
@@ -581,11 +615,24 @@ export const updateTTSStatus = internalMutation({
 
 function cleanOCRText(raw: string): string {
   return raw
-    .replace(/<\|ref\|>[^<]*<\|\/ref\|>/g, "")
-    .replace(/<\|det\|>[^<]*<\|\/det\|>/g, "")
+    // Remove OCR markup tags (ref, det, box coordinates)
+    .replace(/<\|[^|]+\|>[^<]*<\|\/[^|]+\|>/g, "")
+    // Remove any remaining angle bracket tags
+    .replace(/<[^>]*>/g, "")
+    // Remove torch debug output
     .replace(/={3,}[^=]*torch\.Size[^=]*={3,}/g, "")
+    .replace(/BASE:\s*torch\.Size.*$/gm, "")
+    .replace(/PATCHES:\s*torch\.Size.*$/gm, "")
+    // Remove page markers
     .replace(/---\s*Page\s*\d+\s*---/g, "")
+    // Remove markdown headers
     .replace(/^#{1,6}\s+/gm, "")
+    // Remove bounding box coordinates that might have leaked through
+    .replace(/\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g, "")
+    // Remove standalone numbers/codes that TTS can't handle well
+    .replace(/\b[A-Z]{2,}-\d+[A-Z]?\b/g, "")  // e.g., LSL-901A
+    // Normalize whitespace
     .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+/g, " ")
     .trim();
 }

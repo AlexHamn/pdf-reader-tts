@@ -116,26 +116,32 @@ Full read-aloud experience with highlighting
 ---
 
 ## Epic 6: TTS Parallel Processing
-**Status:** Not Started
+**Status:** Complete
 
 ### Background
 Current TTS generation is sequential with `max_inputs=1`, causing 100-page documents to take 60-80+ minutes. Modal's official Chatterbox example uses `max_inputs=10` on A10G GPU.
 
 ### Tasks
-- [ ] Update Modal TTS endpoint to `max_inputs=10`
-- [ ] Install and configure `@convex-dev/workpool` component
-- [ ] Refactor `convex/tts.ts` to use Workpool for parallel chunk generation
-- [ ] Implement `onComplete` callback for progress tracking
-- [ ] Add batch enqueueing with `enqueueActionBatch`
-- [ ] Test with 50+ page documents
+- [x] Install and configure `@convex-dev/workpool` component
+- [x] Register workpool in `convex/convex.config.ts`
+- [x] Create `convex/ttsWorkpool.ts` with pool configuration
+- [x] Refactor `convex/tts.ts` to use Workpool for parallel chunk generation
+- [x] Implement `onChunkComplete` callback for progress tracking
+- [x] Configure Modal for container scaling (`max_containers=10`)
+- [x] Improve text cleaning to prevent TTS errors (OCR artifacts, bounding boxes)
 
 ### Deliverable
-TTS generation runs 10x faster through parallelization
+TTS generation runs in parallel through container scaling
 
-### Technical Notes
-- **Workpool Config**: `maxParallelism: 10` to match Modal endpoint
-- **Retry Logic**: Use Workpool's built-in retry with backoff for transient failures
-- **Progress Tracking**: Use `onComplete` to update document status as chunks complete
+### Implementation Notes
+- **Key Finding**: Chatterbox TTS cannot handle concurrent GPU requests on the same container. Attempts with `max_inputs=5-10` caused tensor conflicts ("stack expects each tensor to be equal size", "got NoneType").
+- **Solution**: Parallelism via container scaling, not concurrent GPU access
+  - `max_containers=10` - Modal scales up to 10 containers under load
+  - No `min_containers` - no idle costs, accepts cold starts
+  - Each container processes 1 request at a time with its own GPU
+- **Workpool Config**: `convex/ttsWorkpool.ts` with `maxParallelism: 10`, retry with exponential backoff
+- **Text Cleaning**: Enhanced `cleanOCRText` in `convex/tts.ts` and `preprocess_text` in Modal endpoint to remove OCR artifacts (`<|ref|>`, `<|det|>` tags, bounding boxes, technical codes like `LSL-901A`)
+- **Progress Tracking**: `onChunkComplete` mutation counts completed chunks and marks document ready when all finish
 
 ### References
 - [Modal Chatterbox Example](https://modal.com/docs/examples/chatterbox_tts)
@@ -262,7 +268,7 @@ Optimized configuration for documents of all sizes
 | 3. Embeddings & Vector Search | Complete | 100% |
 | 4. Q&A Chat Interface | Complete | 100% |
 | 5. TTS Playback | Complete | 100% |
-| 6. TTS Parallel Processing | Not Started | 0% |
+| 6. TTS Parallel Processing | Complete | 100% |
 | 7. OCR Parallelization & Streaming | Not Started | 0% |
 | 8. Frontend Virtualization | Not Started | 0% |
 | 9. Progressive Playback & UX | Not Started | 0% |

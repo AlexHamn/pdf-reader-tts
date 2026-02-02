@@ -8,6 +8,7 @@ Returns WAV audio via streaming response.
 import modal
 import io
 import re
+import time
 
 app = modal.App("chatterbox-tts")
 
@@ -36,21 +37,33 @@ def preprocess_text(text: str) -> str:
     - Ensure minimum length
     - Normalize whitespace
     """
-    # Remove unusual unicode characters that might cause issues
-    # Keep letters, numbers, basic punctuation, and accented characters
-    text = re.sub(r'[^\w\s.,;:!?¿¡\'"()\-áéíóúüñÁÉÍÓÚÜÑ]', ' ', text)
+    # Remove any remaining HTML/XML-like tags
+    text = re.sub(r'<[^>]*>', '', text)
+
+    # Remove bounding box coordinates
+    text = re.sub(r'\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]', '', text)
+
+    # Remove technical codes (e.g., LSL-901A, PLC-123)
+    text = re.sub(r'\b[A-Z]{2,}-\d+[A-Z]?\b', '', text)
+
+    # Keep only letters, numbers, basic punctuation, and common accented characters
+    # Extended to include more Latin characters
+    text = re.sub(r'[^\w\s.,;:!?¿¡\'"()\-àáâãäåèéêëìíîïòóôõöùúûüýÿñçÀÁÂÃÄÅÈÉÊËÌÍÎÏÒÓÔÕÖÙÚÛÜÝŸÑÇ]', ' ', text)
 
     # Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
 
-    # Ensure minimum length to avoid tensor issues
-    # Chatterbox needs enough tokens to generate properly
-    MIN_LENGTH = 20
-    if len(text) < MIN_LENGTH:
-        # Pad with a neutral phrase that won't affect meaning much
-        text = text + "." if not text.endswith('.') else text
+    # Remove isolated single characters (often OCR artifacts)
+    text = re.sub(r'\s+[a-zA-Z]\s+', ' ', text)
 
-    return text
+    # Ensure minimum length to avoid tensor/kernel issues
+    MIN_LENGTH = 30
+    if len(text) < MIN_LENGTH:
+        # Don't pad - just return what we have, TTS will handle short text
+        # The chunker should ensure reasonable length
+        pass
+
+    return text.strip()
 
 
 @app.cls(
@@ -59,8 +72,8 @@ def preprocess_text(text: str) -> str:
     image=image,
     volumes={MODEL_DIR: volume},
     scaledown_window=5 * MINUTES,
+    max_containers=10,  # Scale up to 10 under load, no warm containers
 )
-@modal.concurrent(max_inputs=1)  # Process one at a time to avoid GPU memory conflicts
 class TTSModel:
     @modal.enter()
     def load_model(self):
@@ -120,16 +133,20 @@ class TTSModel:
                 content={"error": "text is empty after preprocessing"}
             )
 
+        # Log what we're about to synthesize for debugging
+        print(f"TTS input ({len(processed_text)} chars): '{processed_text[:100]}...'")
+
         # Retry logic for transient tensor errors
         max_retries = 3
         last_error = None
 
         for attempt in range(max_retries):
             try:
-                print(f"Synthesizing (attempt {attempt + 1}): '{processed_text[:50]}...' lang={language}")
+                print(f"Synthesizing (attempt {attempt + 1})")
 
-                # Clear CUDA cache before generation to avoid memory fragmentation
+                # Clear CUDA cache and synchronize before generation
                 torch.cuda.empty_cache()
+                torch.cuda.synchronize()
 
                 # Generate audio with cadence controls
                 wav = self.model.generate(
@@ -156,15 +173,19 @@ class TTSModel:
                 last_error = e
                 error_str = str(e)
 
-                # Check if it's a tensor shape error that might be transient
-                if "stack expects each tensor to be equal size" in error_str:
-                    print(f"Tensor shape error on attempt {attempt + 1}, retrying...")
+                # Check if it's a tensor/kernel error that might be transient
+                transient_errors = [
+                    "stack expects each tensor to be equal size",
+                    "got NoneType",
+                    "Kernel size can't be greater than actual input size",
+                    "Sizes of tensors must match",
+                ]
+                if any(err in error_str for err in transient_errors):
+                    print(f"Tensor error on attempt {attempt + 1}: {error_str[:100]}")
                     torch.cuda.empty_cache()
-
-                    # Try with slightly modified parameters on retry
-                    if attempt == 1:
-                        exaggeration = max(0.3, exaggeration - 0.1)
-                        cfg_weight = max(0.3, cfg_weight - 0.1)
+                    torch.cuda.synchronize()
+                    # Small delay before retry
+                    time.sleep(0.5)
                     continue
                 else:
                     # For other errors, don't retry
@@ -172,6 +193,21 @@ class TTSModel:
 
             except Exception as e:
                 last_error = e
+                error_str = str(e)
+                # Also retry tensor/kernel errors caught here
+                transient_errors = [
+                    "got NoneType",
+                    "expected Tensor",
+                    "Kernel size",
+                    "Sizes of tensors",
+                    "stack expects",
+                ]
+                if any(err in error_str for err in transient_errors):
+                    print(f"Tensor error on attempt {attempt + 1}: {error_str[:100]}")
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    time.sleep(0.5)
+                    continue
                 break
 
         # All retries failed

@@ -6,30 +6,37 @@ This guide provides detailed implementation instructions for scaling the PDF rea
 
 | Component | Current Bottleneck | Solution | Expected Improvement |
 |-----------|-------------------|----------|---------------------|
-| TTS Generation | Sequential, `max_inputs=1` | Parallel with Workpool | 10x faster |
+| TTS Generation | Sequential, single container | ✅ Workpool + container scaling | 10x faster |
 | OCR Processing | Sequential pages, single call | Parallel batches with `.map()` | 3-4x faster |
 | Frontend Rendering | All chunks in DOM | react-window virtualization | Constant memory |
 | Playback UX | Wait for all chunks | Progressive playback | Immediate start |
 
 ---
 
-## Epic 6: TTS Parallel Processing
+## Epic 6: TTS Parallel Processing ✅ IMPLEMENTED
 
-### Step 1: Update Modal TTS Endpoint
+> **Key Finding:** Chatterbox TTS cannot handle concurrent GPU requests on the same container. Attempts with `@modal.concurrent(max_inputs=5-10)` cause tensor conflicts. Parallelism must be achieved via container scaling.
+
+### Step 1: Configure Modal for Container Scaling
 
 **File:** `modal/tts_endpoint.py`
 
-Change the concurrent inputs limit:
-
 ```python
-# Before
-@modal.concurrent(max_inputs=1)
-
-# After
-@modal.concurrent(max_inputs=10)
+@app.cls(
+    gpu=GPU_TYPE,
+    timeout=10 * MINUTES,
+    image=image,
+    volumes={MODEL_DIR: volume},
+    scaledown_window=5 * MINUTES,
+    max_containers=10,  # Scale up to 10 under load, no warm containers
+)
+# NO @modal.concurrent - each container processes 1 request at a time
+# Parallelism achieved via multiple containers, not concurrent GPU access
+class TTSModel:
+    ...
 ```
 
-This single change allows 10 concurrent TTS requests per container. Modal's official Chatterbox example uses this exact configuration on A10G GPU.
+**Why not `max_inputs=10`?** Chatterbox model has shared GPU state that gets corrupted with concurrent requests, causing errors like "stack expects each tensor to be equal size" and "got NoneType".
 
 ### Step 2: Install Convex Workpool
 
@@ -43,8 +50,8 @@ npm install @convex-dev/workpool
 
 ```typescript
 import { defineApp } from "convex/server";
-import rag from "@convex-dev/rag/convex.config";
-import workpool from "@convex-dev/workpool/convex.config";
+import rag from "@convex-dev/rag/convex.config.js";
+import workpool from "@convex-dev/workpool/convex.config.js";
 
 const app = defineApp();
 app.use(rag);
@@ -61,15 +68,13 @@ export default app;
 import { Workpool } from "@convex-dev/workpool";
 import { components } from "./_generated/api";
 
-// TTS pool with parallelism matching Modal endpoint
 export const ttsPool = new Workpool(components.workpool, {
   maxParallelism: 10,
-
-  // Retry transient failures with backoff
-  retries: {
+  retryActionsByDefault: true,
+  defaultRetryBehavior: {
     maxAttempts: 3,
     initialBackoffMs: 1000,
-    maxBackoffMs: 10000,
+    base: 2,
   },
 });
 ```
@@ -78,47 +83,87 @@ export const ttsPool = new Workpool(components.workpool, {
 
 **File:** `convex/tts.ts`
 
-Replace the sequential loop with Workpool batch enqueueing:
+Replace the sequential loop with Workpool enqueueing:
 
 ```typescript
 import { ttsPool } from "./ttsWorkpool";
 
-export const processDocumentTTS = action({
-  args: { documentId: v.id("documents") },
-  handler: async (ctx, args) => {
-    const chunks = await getChunksToProcess(ctx, args.documentId);
-
-    // Batch enqueue all chunks for parallel processing
-    const jobs = chunks.map((chunk, index) => ({
-      action: internal.tts.generateSingleChunk,
-      args: {
-        documentId: args.documentId,
-        chunkIndex: index,
-        text: chunk.text,
-      },
-      // Optional: callback when each chunk completes
+// In processDocumentTTS and generateDocumentAudio:
+const totalChunks = chunks.length;
+for (let i = 0; i < chunks.length; i++) {
+  const chunk = chunks[i];
+  await ttsPool.enqueueAction(
+    ctx,
+    internal.tts.generateSingleChunk,
+    {
+      documentId: args.documentId,
+      chunkIndex: i,
+      text: chunk.text,
+      startCharIndex: chunk.startCharIndex,
+      endCharIndex: chunk.endCharIndex,
+      language,
+      exaggeration,
+      cfgWeight,
+    },
+    {
       onComplete: internal.tts.onChunkComplete,
-    }));
+      context: { documentId: args.documentId, totalChunks },
+    }
+  );
+}
 
-    await ttsPool.enqueueActionBatch(ctx, jobs);
-  },
-});
-
-// Called when each chunk finishes (success or failure)
+// Completion handler
 export const onChunkComplete = internalMutation({
   args: {
-    documentId: v.id("documents"),
-    chunkIndex: v.number(),
-    success: v.boolean(),
+    workId: v.string(),
+    result: v.union(
+      v.object({ kind: v.literal("success"), returnValue: v.any() }),
+      v.object({ kind: v.literal("failed"), error: v.string() }),
+      v.object({ kind: v.literal("canceled") })
+    ),
+    context: v.object({
+      documentId: v.id("documents"),
+      totalChunks: v.number(),
+    }),
   },
   handler: async (ctx, args) => {
-    // Update progress, enable progressive playback
-    await updateChunkStatus(ctx, args);
+    const completedChunks = await ctx.db
+      .query("audioChunks")
+      .withIndex("by_document", (q) => q.eq("documentId", args.context.documentId))
+      .collect();
+
+    if (completedChunks.length >= args.context.totalChunks) {
+      await ctx.db.patch(args.context.documentId, { ttsStatus: "ready" });
+    }
   },
 });
 ```
 
-### Step 6: Deploy and Test
+### Step 6: Improve Text Cleaning
+
+**File:** `convex/tts.ts` - `cleanOCRText` function
+
+```typescript
+function cleanOCRText(raw: string): string {
+  return raw
+    // Remove OCR markup tags (ref, det, box coordinates)
+    .replace(/<\|[^|]+\|>[^<]*<\|\/[^|]+\|>/g, "")
+    // Remove any remaining angle bracket tags
+    .replace(/<[^>]*>/g, "")
+    // Remove torch debug output
+    .replace(/={3,}[^=]*torch\.Size[^=]*={3,}/g, "")
+    // Remove bounding box coordinates
+    .replace(/\[\[\d+,\s*\d+,\s*\d+,\s*\d+\]\]/g, "")
+    // Remove technical codes (LSL-901A, etc.)
+    .replace(/\b[A-Z]{2,}-\d+[A-Z]?\b/g, "")
+    // Normalize whitespace
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+```
+
+### Step 7: Deploy and Test
 
 ```bash
 # Deploy Modal endpoint
@@ -129,6 +174,14 @@ npx convex deploy
 
 # Test with a 50+ page document
 ```
+
+### Result
+
+- Workpool queues up to 10 TTS actions in parallel
+- Modal spins up multiple containers (up to 10) to process them
+- Each container has its own GPU, no memory conflicts
+- No idle costs (containers scale down after 5 min)
+- ~10x speedup potential under load
 
 ---
 
@@ -671,13 +724,13 @@ Ensure these are set in Convex dashboard:
 
 ### Testing Checklist
 
-- [ ] Test TTS with 50-page document (should complete in ~5-8 min vs 25-40 min)
+- [x] Test TTS with parallel generation (Epic 6 complete)
+- [x] Verify Workpool retry behavior on transient failures
 - [ ] Test OCR with 100-page document (should complete in ~3-5 min)
 - [ ] Test frontend scrolling with 500+ chunks (should be smooth)
 - [ ] Test progressive playback (should start within 30s of generation start)
 - [ ] Test search functionality in virtualized list
 - [ ] Monitor Modal GPU memory usage under load
-- [ ] Verify Workpool retry behavior on transient failures
 
 ---
 

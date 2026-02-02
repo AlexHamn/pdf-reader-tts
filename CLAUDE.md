@@ -84,8 +84,8 @@ See `docs/epics.md` for detailed progress tracking.
 4. ~~Q&A Chat Interface~~ **DONE**
 5. ~~TTS Playback~~ **DONE**
 
-**Scaling for 100+ Pages (Planned):**
-6. TTS Parallel Processing - Use Workpool + `max_inputs=10`
+**Scaling for 100+ Pages:**
+6. ~~TTS Parallel Processing~~ **DONE** - Workpool + container scaling
 7. OCR Parallelization - Modal `.map()` for page batches
 8. Frontend Virtualization - react-window for large documents
 9. Progressive Playback - Start playback before all chunks ready
@@ -143,19 +143,20 @@ See `docs/scaling-implementation-guide.md` for detailed implementation instructi
 - **Endpoint**: Set `MODAL_TTS_ENDPOINT` env var in Convex dashboard
 - **API**: POST with `text`, `language`, `exaggeration`, `cfg_weight` parameters
 - **Output**: WAV audio (streamed)
-- **Concurrency**: Currently `max_inputs=1` (sequential) - **change to 10 for large docs**
+- **Parallelism**: Via container scaling (`max_containers=10`), NOT concurrent GPU access
 - **Notes**:
   - Model cached in Modal Volume (`tts-model-cache`)
-  - Text preprocessing to handle problematic characters
-  - Minimum text length padding to avoid tensor issues
+  - Text preprocessing cleans OCR artifacts (tags, bounding boxes, technical codes)
+  - Chatterbox cannot handle concurrent GPU requests (causes tensor conflicts)
+  - Parallelism achieved via multiple containers, each with its own GPU
   - Supports Spanish, English, French, German, Chinese, and more
-  - Modal's official Chatterbox example uses `max_inputs=10` on A10G
 
 ### TTS Integration
 - **Convex Module**: `convex/tts.ts` - audio chunk management and playback state
+- **Workpool**: `convex/ttsWorkpool.ts` - parallel chunk generation (maxParallelism: 10)
 - **Audio Player**: `src/components/audio-player.tsx` - playback controls, speed adjustment, auto-advance
 - **Schema**: `audioChunks` (per-chunk audio storage), `playbackState` (real-time sync)
-- **Flow**: Document ready → auto-generate audio → chunks stored with URLs → player loads chunks sequentially
+- **Flow**: Document ready → workpool enqueues chunks in parallel → Modal scales containers → chunks stored → player loads sequentially
 - **Features**:
   - Click-to-play: Click any text chunk to start playback from that position
   - Text highlighting: Active chunk highlighted during playback with auto-scroll
@@ -170,7 +171,7 @@ See `docs/scaling-implementation-guide.md` for detailed implementation instructi
 - **Note**: Currently uses direct HTTP to LLM instead of `@convex-dev/agent` due to ai SDK version conflict (see `docs/epics.md` for details)
 
 ### Convex RAG Integration
-- **Component**: `@convex-dev/rag` registered in `convex/convex.config.ts`
+- **Components**: `@convex-dev/rag` and `@convex-dev/workpool` registered in `convex/convex.config.ts`
 - **Chunking**: 1000 chars with 200-char overlap, sentence boundary preservation
 - **Flow**: OCR complete → embeddingStatus: "processing" → chunks generated → embeddings stored → embeddingStatus: "ready"
 - **Search**: Use `searchDocument` action in `convex/embeddings.ts` for Q&A retrieval
